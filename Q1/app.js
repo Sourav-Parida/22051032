@@ -14,7 +14,7 @@ const idMap = {
   "r": "rand"
 };
 
-// Fetch numbers from external API
+
 const getNums = async (type) => {
   const opts = {
     hostname: "20.244.56.144",
@@ -42,14 +42,13 @@ const getNums = async (type) => {
   });
 };
 
-// Check valid number ID
+
 const checkId = (req, res, next) => {
   const id = req.params.numberid;
   if (!idMap[id]) return res.status(400).json({ error: "Invalid ID" });
   next();
 };
 
-// Main number processing endpoint
 app.get("/numbers/:numberid", checkId, async (req, res) => {
   const id = req.params.numberid;
   const prev = [...numsWin];
