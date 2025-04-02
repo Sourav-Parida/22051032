@@ -1,89 +1,75 @@
 const express = require("express");
 const app = express();
-const http = require("http");
 const PORT = 3000;
 
-const WINDOW_SIZE = 10;
-let numberWindow = [];
-const BEARER_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJNYXBDbGFpbXMiOnsiZXhwIjoxNzQzNjAzODM0LCJpYXQiOjE3NDM2MDM1MzQsImlzcyI6IkFmZm9yZG1lZCIsImp0aSI6IjAwZGFkNzYwLWY1MDQtNDY1YS1iODgxLTgzYzk2MTFlNGQzNiIsInN1YiI6InNvdXJhdnBhcmlkYTE3MEBnbWFpbC5jb20ifSwiZW1haWwiOiJzb3VyYXZwYXJpZGExNzBAZ21haWwuY29tIiwibmFtZSI6InNvdXJhdiBwYXJpZGEiLCJyb2xsTm8iOiIyMjA1MTAzMiIsImFjY2Vzc0NvZGUiOiJud3B3cloiLCJjbGllbnRJRCI6IjAwZGFkNzYwLWY1MDQtNDY1YS1iODgxLTgzYzk2MTFlNGQzNiIsImNsaWVudFNlY3JldCI6ImhURmVRTVllblNYY0NGeEcifQ.cbgCYHPBZGQU8UfWvnNYmsLmXOFU3YN0OjXHvfRSSG8"; // Replace with actual token
+const winSize = 10;
+let numsWin = [];
+const token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJNYXBDbGFpbXMiOnsiZXhwIjoxNzQzNjAzNDg2LCJpYXQiOjE3NDM2MDMxODYsImlzcyI6IkFmZm9yZG1lZCIsImp0aSI6IjAwZGFkNzYwLWY1MDQtNDY1YS1iODgxLTgzYzk2MTFlNGQzNiIsInN1YiI6InNvdXJhdnBhcmlkYTE3MEBnbWFpbC5jb20ifSwiZW1haWwiOiJzb3VyYXZwYXJpZGExNzBAZ21haWwuY29tIiwibmFtZSI6InNvdXJhdiBwYXJpZGEiLCJyb2xsTm8iOiIyMjA1MTAzMiIsImFjY2Vzc0NvZGUiOiJud3B3cloiLCJjbGllbnRJRCI6IjAwZGFkNzYwLWY1MDQtNDY1YS1iODgxLTgzYzk2MTFlNGQzNiIsImNsaWVudFNlY3JldCI6ImhURmVRTVllblNYY0NGeEcifQ.whsWxCGz0qp9XSxQcTfo8wJv5ko4DsEZq2j9-nNTAxI";
 
 
-
-app.get("/", (req, res) => {
-    res.send("Hello World!");
-});
-
-// Mapping of number IDs to API types
-const numberIdMap = {
-    "p": "primes",
-    "f": "fibo",
-    "e": "even",
-    "r": "rand"
+const idMap = {
+  "p": "primes",
+  "f": "fibo",
+  "e": "even",
+  "r": "rand"
 };
 
-// Fetch numbers from the third-party API
-const fetchNumbers = async (type) => {
-    const mappedType = numberIdMap[type] || type;
-    const options = {
-        hostname: "20.244.56.144",
-        path: `/evaluation-service/${mappedType}`,  // Fixed string formatting
-        method: "GET",
-        headers: {
-            "Authorization": `Bearer ${BEARER_TOKEN}`, // Fixed template literal
-            "Content-Type": "application/json"
-        }
-    };
-
-    return new Promise((resolve) => {
-        const req = https.request(options, (res) => {
-            let data = "";
-            res.on("data", (chunk) => { data += chunk; });
-            res.on("end", () => {
-                try {
-                    const parsedData = JSON.parse(data);
-                    resolve(parsedData.numbers || []);
-                } catch (error) {
-                    resolve([]);
-                }
-            });
-        });
-
-        req.on("error", () => resolve([]));
-        req.setTimeout(500, () => {
-            req.destroy();
-            resolve([]);
-        });
-        req.end();
-    });
-};
-
-// Middleware to validate numberid
-const validateNumberId = (req, res, next) => {
-    if (!numberIdMap.hasOwnProperty(req.params.numberid)) {
-        return res.status(400).json({ error: "Invalid number ID" });
+// Fetch numbers from external API
+const getNums = async (type) => {
+  const opts = {
+    hostname: "20.244.56.144",
+    path: `/evaluation-service/${idMap[type] || type}`,
+    method: "GET",
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Content-Type": "application/json"
     }
-    next();
+  };
+
+  return new Promise(resolve => {
+    const req = https.request(opts, res => {
+      let data = "";
+      res.on("data", chunk => data += chunk);
+      res.on("end", () => {
+        try { resolve(JSON.parse(data).numbers || []); } 
+        catch { resolve([]); }
+      });
+    });
+
+    req.on("error", () => resolve([]));
+    req.setTimeout(500, () => req.destroy() || resolve([]));
+    req.end();
+  });
 };
 
-app.get("/numbers/:numberid", validateNumberId, async (req, res) => {
-    const { numberid } = req.params;
-    const prevState = [...numberWindow];
-    
-    const numbers = await fetchNumbers(numberid);
-    if (numbers.length > 0) {
-        numberWindow = [...new Set([...numberWindow, ...numbers])].slice(-WINDOW_SIZE);
-    }
+// Check valid number ID
+const checkId = (req, res, next) => {
+  const id = req.params.numberid;
+  if (!idMap[id]) return res.status(400).json({ error: "Invalid ID" });
+  next();
+};
 
-    const avg = numberWindow.length ? (numberWindow.reduce((sum, num) => sum + num, 0) / numberWindow.length).toFixed(2) : 0;
+// Main number processing endpoint
+app.get("/numbers/:numberid", checkId, async (req, res) => {
+  const id = req.params.numberid;
+  const prev = [...numsWin];
+  
+  const nums = await getNums(id);
+  if (nums.length) {
+    numsWin = [...new Set([...numsWin, ...nums])].slice(-winSize);
+  }
 
-    res.json({
-        windowPrevstate: prevState,
-        windowCurrState: [...numberWindow],
-        numbers,
-        avg: parseFloat(avg)
-    });
+  const avg = numsWin.length 
+    ? Number((numsWin.reduce((s, n) => s + n, 0) / numsWin.length).toFixed(2))
+    : 0;
+
+  res.json({
+    windowPrevstate: prev,
+    windowCurrState: numsWin,
+    numbers: nums,
+    avg: avg
+  });
 });
 
-app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);  // Fixed string interpolation
-});
+app.get("/", (req, res) => res.send("Hello World!"));
+app.listen(PORT, () => console.log(`Running on http://localhost:${PORT}`));
